@@ -3,7 +3,11 @@ Progetto lisp regexp-comp-nfa
 ||#
 
 (defun is-regexp (RE)
-  (cond ((atom RE) t)
+  (cond ((and (atom RE) (not (null RE))) t)
+        ((and (consp RE)
+              (not (or (eq (car RE) '*) (eq (car RE) '+)
+                                    (eq (car RE) '/) (eq (car RE) '[]))))
+         t)
         ((and (eq (car RE) '*) (= (length (cdr RE)) 1))
          (is-regexp (cadr RE)))
         ((and (eq (car RE) '+) (= (length (cdr RE)) 1))
