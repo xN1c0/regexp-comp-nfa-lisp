@@ -33,24 +33,34 @@ Progetto lisp regexp-comp-nfa
         ((consp RE) (nfa-regexp-comp-delta-base RE))))
 
 (defun nfa-regexp-comp-delta-base (RE)
-  (let ((q0 (gensym "q-")) (q1 (gensym "q-")))
-    (list (list RE q0 q1))))
+  (let ((start (symbol-name (gensym "q-")))
+        (final (symbol-name (gensym "q-"))))
+    (list (list RE start final))))
 
 (defun nfa-regexp-comp-delta-star (RE)
-  (let ((start (gensym "q-"))
-        (final (gensym "q-"))
+  (let ((start (symbol-name (gensym "q-")))
+        (final (symbol-name (gensym "q-")))
         (sub-delta (nfa-regexp-comp-delta RE)))
-    (append (list (list 'epsilon start final))
-            (list (list 'epsilon start (second (first sub-delta))))
+    (append (list (list 'epsilon
+                        start
+                        final))
+            (list (list 'epsilon
+                        start
+                        (second (first sub-delta))))
             sub-delta
-            (list (list 'epsilon (caddar (last sub-delta)) final)))))
+            (list (list 'epsilon
+                        (caddar (last sub-delta))
+                        (second (first sub-delta))))
+            (list (list 'epsilon
+                        (caddar (last sub-delta))
+                        final)))))
 
 (defun nfa-regexp-comp-delta-plus (RE)
   (nfa-regexp-comp-delta (list '[] RE (list '* RE))))
 
 (defun nfa-regexp-comp-delta-or (RE)
-  (let ((start (gensym "q-"))
-        (final (gensym "q-")))
+  (let ((start (symbol-name (gensym "q-")))
+        (final (symbol-name (gensym "q-"))))
     (nfa-regexp-comp-delta-or-helper RE start final)))
 
 (defun nfa-regexp-comp-delta-or-helper (list start final)
@@ -64,15 +74,50 @@ Progetto lisp regexp-comp-nfa
                                                final)))))
 
 (defun nfa-regexp-comp-delta-seq (RE)
-  (let ((start (gensym "q-"))
-        (final (gensym "q-")))
+  (let ((start (symbol-name (gensym "q-")))
+        (final (symbol-name (gensym "q-"))))
     (nfa-regexp-comp-delta-seq-helper RE start final)))
 
 (defun nfa-regexp-comp-delta-seq-helper (list start final)
   (let ((sub-delta (nfa-regexp-comp (car list))))
-    (if (null list) nil
+    (if (= (length list) 1)
+        (append (list (list 'epsilon start (second (first sub-delta))))
+                sub-delta
+                (list (list 'epsilon (caddar (last sub-delta)) final)))
       (append (list (list 'epsilon start (second (first sub-delta))))
               sub-delta
               (nfa-regexp-comp-delta-seq-helper (cdr list)
                                                 (caddar (last sub-delta))
                                                 final)))))
+
+(defun nfa-rec (FA Input)
+  (let ((start (second (first FA)))
+        (final (caddar (last FA))))
+    (nfa-rec-helper FA Input start start final)))
+
+(defun nfa-rec-helper (FA input state start final)
+  (let ((delta-list (nfa-rec-delta-list FA (car input) state)))
+    (if (and (null input) (equal state final)) t
+      (nfa-rec-bet FA delta-list input state start final))))
+
+(defun nfa-rec-bet (FA delta-bet input state start final)
+  (let ((delta-q (first delta-bet)))
+    (cond ((null delta-q) nil)
+          ((eq 'epsilon (first delta-q))
+           (or (nfa-rec-helper FA input (third delta-q) start final)
+               (nfa-rec-bet FA (rest delta-bet) input state start final)))
+          ((eq (first input) (first delta-q))
+           (or (nfa-rec-helper FA (rest input) (third delta-q) start final)
+               (nfa-rec-bet FA (rest delta-bet) (rest input) state start final))))))
+
+(defun nfa-rec-delta-list (FA input state)
+  (let ((delta-nfa (first FA))
+        (delta-input (list input state (third (first FA))))
+        (delta-epsilon (list 'epsilon state (third (first FA)))))
+    (cond ((null delta-nfa)
+           nil)
+          ((equal delta-nfa delta-input)
+           (cons delta-nfa (nfa-rec-delta-list (rest FA) input state)))
+          ((equal delta-nfa delta-epsilon)
+           (cons delta-nfa (nfa-rec-delta-list (rest FA) input state)))
+          (t (nfa-rec-delta-list (rest FA) input state)))))
